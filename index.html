@@ -1,178 +1,110 @@
-<script>
-    (function(){
-        const micBtn = document.getElementById('micButton');
-        const userSpeechSpan = document.getElementById('userSpeech');
-        const assistantBox = document.getElementById('assistantReplyBox');
-        const statusLed = document.getElementById('statusLed');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Speech App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+        .listening {
+            background-color: red;
+            color: white;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            width: 80%;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. Voice to Text කොටස -->
+    <div class="section">
+        <h2>Voice to Text</h2>
+        <button id="micBtn">Start Mic</button>
+        <p id="status">Status: Click the button to speak</p>
+    </div>
+
+    <!-- 2. Text to Voice කොටස -->
+    <div class="section">
+        <h2>Text to Voice</h2>
+        <input type="text" id="textInput" placeholder="මොනවා හරි ටයිප් කරන්න..." />
+        <button id="speakBtn">Speak (කියවන්න)</button>
+    </div>
+
+    <!-- JavaScript කොටස -->
+    <script>
+        // --- Voice to Text (කතා කරන දේ අකුරු කිරීම) ---
+        const micBtn = document.getElementById('micBtn');
+        const status = document.getElementById('status');
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 
-        let isListening = false;
+        if (!SpeechRecognition) {
+            status.textContent = 'Browser එක Mic Support කරන්නේ නෑ. Chrome use කරපන්.';
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'en-US'; // සිංහල ඕනෙනම් 'si-LK' දෙන්න
+            recognition.continuous = false;
+            recognition.interimResults = false;
 
-        function speak(text, callback) {
-            if (!window.speechSynthesis) {
-                updateAssistantMessage(`⚠️ Speech not supported. But I said: "${text}"`);
-                if(callback) callback();
-                return;
-            }
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US'; 
-            utterance.rate = 0.95;
-            utterance.pitch = 1.0;
-            utterance.volume = 1;
-            utterance.onend = () => {
-                if(callback) callback();
-            };
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(utterance);
-            updateAssistantMessage(`🔊 ${text}`);
-        }
-
-        function updateAssistantMessage(htmlOrText) {
-            assistantBox.innerHTML = `<p>${htmlOrText}</p>`;
-        }
-
-        function setListeningUI(active) {
-            if(active) {
-                statusLed.style.backgroundColor = "#f97316";
-                statusLed.style.boxShadow = "0 0 12px #f97316";
-                let ring = document.querySelector('.pulse-ring');
-                if(!ring) {
-                    ring = document.createElement('div');
-                    ring.classList.add('pulse-ring');
-                    document.getElementById('avatarRing').appendChild(ring);
-                }
-                ring.style.opacity = "1";
-            } else {
-                statusLed.style.backgroundColor = "#4ade80";
-                statusLed.style.boxShadow = "0 0 8px #4ade80";
-                const ring = document.querySelector('.pulse-ring');
-                if(ring) ring.style.opacity = "0";
-            }
-        }
-
-        function processCommand(commandText) {
-            let lowerCmd = commandText.toLowerCase().trim();
-            console.log("Command:", lowerCmd);
-            userSpeechSpan.innerText = commandText || "(silence)";
-
-            if (!lowerCmd) {
-                speak("I didn't catch that, sir. Please repeat.");
-                return;
-            }
-
-            if (lowerCmd.includes("time") || lowerCmd.includes("වෙලාව")) {
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                speak(`Sir, the current time is ${timeStr}`);
-            }
-            else if (lowerCmd.includes("search") || lowerCmd.includes("google") || lowerCmd.startsWith("search for")) {
-                let query = commandText.replace(/search|google|සොයන්න|for/gi, "").trim();
-                if(query.length > 1) {
-                    let url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-                    window.open(url, '_blank');
-                    speak(`Searching Google for ${query}`);
-                } else {
-                    speak("What would you like me to search?");
-                }
-            }
-            else {
-                speak("Sorry sir, I didn't get that command. Try 'time', 'date', or 'search something'.");
-            }
-        }
-
-        function startListening() {
-            // HTTPS Check
-            if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                updateAssistantMessage("❌ දෝෂයකි: මයික්‍රෆෝනය වැඩ කිරීමට නම් වෙබ් අඩවිය HTTPS විය යුතුයි. කරුණාකර ආරක්ෂිත සම්බන්ධතාවයක් භාවිතා කරන්න.");
-                speak("Microphone requires a secure HTTPS connection.");
-                return;
-            }
-
-            if (!recognition) {
-                updateAssistantMessage("⚠️ ඔබගේ බ්‍රවුසරය Voice Recognition සඳහා සහාය නොදක්වයි. කරුණාකර Google Chrome භාවිතා කරන්න.");
-                speak("Voice not supported in this browser.");
-                return;
-            }
-
-            if (isListening) {
-                recognition.stop();
-                return;
-            }
-
-            try {
-                recognition.lang = 'en-US'; 
-                recognition.interimResults = false;
-                recognition.continuous = false;
-                recognition.maxAlternatives = 1;
-
-                recognition.onstart = () => {
-                    isListening = true;
-                    setListeningUI(true);
-                    updateAssistantMessage("🎤 Listening... කතා කරන්න.");
-                    userSpeechSpan.innerText = "...listening";
-                };
-
-                recognition.onerror = (event) => {
-                    console.error("Error: ", event.error);
-                    isListening = false;
-                    setListeningUI(false);
-                    
-                    let errMsg = "මයික්‍රෆෝනයට සම්බන්ධ වීමේ ගැටලුවකි.";
-                    if(event.error === 'not-allowed') {
-                        errMsg = "මයික්‍රෆෝනය සඳහා බ්‍රවුසරයෙන් අවසර ලබා දී නැත (Blocked). කරුණාකර URL තීරුවේ ඇති අගුල (Lock icon) මත ක්ලික් කර Allow කරන්න.";
-                    } else if(event.error === 'network') {
-                        errMsg = "අන්තර්ජාල සම්බන්ධතා ගැටලුවකි.";
-                    } else if(event.error === 'no-speech') {
-                        errMsg = "ඔබේ හඬ ඇසුණේ නැත. මයික්‍රෆෝනය නැවත පරීක්ෂා කරන්න.";
-                    }
-                    
-                    updateAssistantMessage(`❌ ${errMsg}`);
-                    speak("Microphone error occurred.");
-                };
-
-                recognition.onend = () => {
-                    isListening = false;
-                    setListeningUI(false);
-                    if(userSpeechSpan.innerText === "...listening") {
-                        userSpeechSpan.innerText = "—";
-                    }
-                };
-
-                recognition.onresult = (event) => {
-                    const last = event.results.length - 1;
-                    const transcript = event.results[last][0].transcript;
-                    if (transcript) {
-                        processCommand(transcript);
-                    } else {
-                        userSpeechSpan.innerText = "(no speech)";
-                        speak("I didn't hear anything, sir.");
-                    }
-                };
-                
+            micBtn.addEventListener('click', () => {
                 recognition.start();
-            } catch(e) {
-                console.log(e);
-                updateAssistantMessage("Error starting voice. කරුණාකර පිටුව Refresh කරන්න.");
-            }
+                micBtn.classList.add('listening');
+                status.textContent = 'Listening... Kiyapan';
+            });
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                status.textContent = `Result: ${transcript}`;
+            };
+
+            recognition.onspeechend = () => {
+                recognition.stop();
+                micBtn.classList.remove('listening');
+            };
+
+            recognition.onerror = (event) => {
+                status.textContent = `Error එකක් ආවා: ${event.error}`;
+                micBtn.classList.remove('listening');
+            };
         }
 
-        micBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            startListening();
-        });
+        // --- Text to Voice (ලියන දේ කටහඬින් ඇසීම) ---
+        const textInput = document.getElementById('textInput');
+        const speakBtn = document.getElementById('speakBtn');
 
-        document.querySelectorAll('.chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                let cmdType = chip.getAttribute('data-cmd');
-                if(cmdType === 'time') processCommand("time");
-                else if(cmdType === 'search') processCommand("search for Jarvis AI");
-            });
-        });
+        speakBtn.addEventListener('click', () => {
+            const text = textInput.value;
 
-        window.addEventListener('load', () => {
-            updateAssistantMessage("✅ Jarvis ready. Press 🎙️ or use chips.");
+            if (text !== '') {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; 
+                utterance.rate = 1; 
+                utterance.pitch = 1; 
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert('කරුණාකර මොනවා හරි ටයිප් කරන්න!');
+            }
         });
-    })();
-</script>
+    </script>
+</body>
+</html>
