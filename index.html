@@ -1,0 +1,178 @@
+<script>
+    (function(){
+        const micBtn = document.getElementById('micButton');
+        const userSpeechSpan = document.getElementById('userSpeech');
+        const assistantBox = document.getElementById('assistantReplyBox');
+        const statusLed = document.getElementById('statusLed');
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+
+        let isListening = false;
+
+        function speak(text, callback) {
+            if (!window.speechSynthesis) {
+                updateAssistantMessage(`⚠️ Speech not supported. But I said: "${text}"`);
+                if(callback) callback();
+                return;
+            }
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US'; 
+            utterance.rate = 0.95;
+            utterance.pitch = 1.0;
+            utterance.volume = 1;
+            utterance.onend = () => {
+                if(callback) callback();
+            };
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+            updateAssistantMessage(`🔊 ${text}`);
+        }
+
+        function updateAssistantMessage(htmlOrText) {
+            assistantBox.innerHTML = `<p>${htmlOrText}</p>`;
+        }
+
+        function setListeningUI(active) {
+            if(active) {
+                statusLed.style.backgroundColor = "#f97316";
+                statusLed.style.boxShadow = "0 0 12px #f97316";
+                let ring = document.querySelector('.pulse-ring');
+                if(!ring) {
+                    ring = document.createElement('div');
+                    ring.classList.add('pulse-ring');
+                    document.getElementById('avatarRing').appendChild(ring);
+                }
+                ring.style.opacity = "1";
+            } else {
+                statusLed.style.backgroundColor = "#4ade80";
+                statusLed.style.boxShadow = "0 0 8px #4ade80";
+                const ring = document.querySelector('.pulse-ring');
+                if(ring) ring.style.opacity = "0";
+            }
+        }
+
+        function processCommand(commandText) {
+            let lowerCmd = commandText.toLowerCase().trim();
+            console.log("Command:", lowerCmd);
+            userSpeechSpan.innerText = commandText || "(silence)";
+
+            if (!lowerCmd) {
+                speak("I didn't catch that, sir. Please repeat.");
+                return;
+            }
+
+            if (lowerCmd.includes("time") || lowerCmd.includes("වෙලාව")) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                speak(`Sir, the current time is ${timeStr}`);
+            }
+            else if (lowerCmd.includes("search") || lowerCmd.includes("google") || lowerCmd.startsWith("search for")) {
+                let query = commandText.replace(/search|google|සොයන්න|for/gi, "").trim();
+                if(query.length > 1) {
+                    let url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                    window.open(url, '_blank');
+                    speak(`Searching Google for ${query}`);
+                } else {
+                    speak("What would you like me to search?");
+                }
+            }
+            else {
+                speak("Sorry sir, I didn't get that command. Try 'time', 'date', or 'search something'.");
+            }
+        }
+
+        function startListening() {
+            // HTTPS Check
+            if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                updateAssistantMessage("❌ දෝෂයකි: මයික්‍රෆෝනය වැඩ කිරීමට නම් වෙබ් අඩවිය HTTPS විය යුතුයි. කරුණාකර ආරක්ෂිත සම්බන්ධතාවයක් භාවිතා කරන්න.");
+                speak("Microphone requires a secure HTTPS connection.");
+                return;
+            }
+
+            if (!recognition) {
+                updateAssistantMessage("⚠️ ඔබගේ බ්‍රවුසරය Voice Recognition සඳහා සහාය නොදක්වයි. කරුණාකර Google Chrome භාවිතා කරන්න.");
+                speak("Voice not supported in this browser.");
+                return;
+            }
+
+            if (isListening) {
+                recognition.stop();
+                return;
+            }
+
+            try {
+                recognition.lang = 'en-US'; 
+                recognition.interimResults = false;
+                recognition.continuous = false;
+                recognition.maxAlternatives = 1;
+
+                recognition.onstart = () => {
+                    isListening = true;
+                    setListeningUI(true);
+                    updateAssistantMessage("🎤 Listening... කතා කරන්න.");
+                    userSpeechSpan.innerText = "...listening";
+                };
+
+                recognition.onerror = (event) => {
+                    console.error("Error: ", event.error);
+                    isListening = false;
+                    setListeningUI(false);
+                    
+                    let errMsg = "මයික්‍රෆෝනයට සම්බන්ධ වීමේ ගැටලුවකි.";
+                    if(event.error === 'not-allowed') {
+                        errMsg = "මයික්‍රෆෝනය සඳහා බ්‍රවුසරයෙන් අවසර ලබා දී නැත (Blocked). කරුණාකර URL තීරුවේ ඇති අගුල (Lock icon) මත ක්ලික් කර Allow කරන්න.";
+                    } else if(event.error === 'network') {
+                        errMsg = "අන්තර්ජාල සම්බන්ධතා ගැටලුවකි.";
+                    } else if(event.error === 'no-speech') {
+                        errMsg = "ඔබේ හඬ ඇසුණේ නැත. මයික්‍රෆෝනය නැවත පරීක්ෂා කරන්න.";
+                    }
+                    
+                    updateAssistantMessage(`❌ ${errMsg}`);
+                    speak("Microphone error occurred.");
+                };
+
+                recognition.onend = () => {
+                    isListening = false;
+                    setListeningUI(false);
+                    if(userSpeechSpan.innerText === "...listening") {
+                        userSpeechSpan.innerText = "—";
+                    }
+                };
+
+                recognition.onresult = (event) => {
+                    const last = event.results.length - 1;
+                    const transcript = event.results[last][0].transcript;
+                    if (transcript) {
+                        processCommand(transcript);
+                    } else {
+                        userSpeechSpan.innerText = "(no speech)";
+                        speak("I didn't hear anything, sir.");
+                    }
+                };
+                
+                recognition.start();
+            } catch(e) {
+                console.log(e);
+                updateAssistantMessage("Error starting voice. කරුණාකර පිටුව Refresh කරන්න.");
+            }
+        }
+
+        micBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            startListening();
+        });
+
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                let cmdType = chip.getAttribute('data-cmd');
+                if(cmdType === 'time') processCommand("time");
+                else if(cmdType === 'search') processCommand("search for Jarvis AI");
+            });
+        });
+
+        window.addEventListener('load', () => {
+            updateAssistantMessage("✅ Jarvis ready. Press 🎙️ or use chips.");
+        });
+    })();
+</script>
